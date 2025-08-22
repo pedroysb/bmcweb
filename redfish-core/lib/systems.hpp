@@ -3114,9 +3114,21 @@ inline void handleComputerSystemGet(
             aRsp->res.jsonValue["Links"]["Chassis"] = std::move(chassisArray);
         });
 
-    getSystemLocationIndicatorActive(asyncResp);
-    // TODO (Gunnar): Remove IndicatorLED after enough time has passed
-    getIndicatorLedState(asyncResp);
+    systems_utils::getValidSystemsPath(
+        asyncResp, systemName,
+        [asyncResp,
+         systemName](const std::optional<std::string>& validSystemsPath) {
+            if (validSystemsPath)
+            {
+                getLocationIndicatorActive(asyncResp, *validSystemsPath);
+            }
+        });
+
+    if constexpr (BMCWEB_REDFISH_ALLOW_DEPRECATED_INDICATORLED)
+    {
+        getIndicatorLedState(asyncResp);
+    }
+
     getComputerSystem(asyncResp);
     getHostState(asyncResp);
     getBootProperties(asyncResp);
@@ -3211,7 +3223,14 @@ inline void handleComputerSystemPatch(
         return;
     }
 
-    asyncResp->res.result(boost::beast::http::status::no_content);
+    if constexpr (!BMCWEB_REDFISH_ALLOW_DEPRECATED_INDICATORLED)
+    {
+        if (indicatorLed)
+        {
+            messages::propertyUnknown(asyncResp->res, "IndicatorLED");
+            return;
+        }
+    }
 
     if (assetTag)
     {
@@ -3250,17 +3269,31 @@ inline void handleComputerSystemPatch(
 
     if (locationIndicatorActive)
     {
-        setSystemLocationIndicatorActive(asyncResp, *locationIndicatorActive);
+        systems_utils::getValidSystemsPath(
+            asyncResp, systemName,
+            [asyncResp, systemName,
+             locationIndicatorActive{*locationIndicatorActive}](
+                const std::optional<std::string>& validSystemsPath) {
+                if (!validSystemsPath)
+                {
+                    messages::resourceNotFound(asyncResp->res, "Systems",
+                                               systemName);
+                    return;
+                }
+                setLocationIndicatorActive(asyncResp, *validSystemsPath,
+                                           locationIndicatorActive);
+            });
     }
 
-    // TODO (Gunnar): Remove IndicatorLED after enough time has
-    // passed
-    if (indicatorLed)
+    if constexpr (BMCWEB_REDFISH_ALLOW_DEPRECATED_INDICATORLED)
     {
-        setIndicatorLedState(asyncResp, *indicatorLed);
-        asyncResp->res.addHeader(boost::beast::http::field::warning,
-                                 "299 - \"IndicatorLED is deprecated. Use "
-                                 "LocationIndicatorActive instead.\"");
+        if (indicatorLed)
+        {
+            setIndicatorLedState(asyncResp, *indicatorLed);
+            asyncResp->res.addHeader(boost::beast::http::field::warning,
+                                     "299 - \"IndicatorLED is deprecated. Use "
+                                     "LocationIndicatorActive instead.\"");
+        }
     }
 
     if (powerRestorePolicy)
