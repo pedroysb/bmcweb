@@ -96,8 +96,9 @@ if (cxx.get_id() == 'clang')
         '-Wno-shadow',
         '-Wno-switch-enum',
         '-Wno-unneeded-internal-declaration',
-        '-Wno-unsafe-buffer-usage-in-container',
-        '-Wno-unsafe-buffer-usage-in-libc-call',
+        #-Wno-unsafe-buffer-usage-in-container',
+        #-Wno-unsafe-buffer-usage-in-libc-call',
+        '-Wno-unsafe-buffer-usage',
         '-Wno-unused-macros',
         '-Wno-used-but-marked-unused',
         '-Wno-weak-vtables',
@@ -428,6 +429,26 @@ executable(
     install: true,
     install_dir: libexec,
 )
+
+if get_option('fuzzing')
+  libfuzzer_args = [
+      '-fsanitize=leak,fuzzer,address',
+      '-fno-omit-frame-pointer',
+      '-fprofile-instr-generate',
+      '-fcoverage-mapping',
+      '-g'
+  ]
+
+  executable(
+    'http2_fuzzer',
+    'src/fuzzer.cpp',
+    include_directories: incdir,
+    dependencies: bmcweb_dependencies,
+    link_with: bmcweblib,
+    cpp_args: libfuzzer_args,
+    link_args: libfuzzer_args,
+  )
+endif
 
 # Generate the bmcweb CLI application
 executable(

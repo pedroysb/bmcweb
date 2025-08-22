@@ -525,3 +525,5 @@ option(
                     enable on production systems at this time.  Other query
                     parameters such as only are not controlled by this option.''',
 )
+
+option('fuzzing', type : 'boolean', value : false, description : 'Enable building the fuzzer.')
