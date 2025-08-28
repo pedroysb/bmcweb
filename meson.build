@@ -412,53 +412,56 @@ srcfiles_bmcweb = files(
     'src/webserver_run.cpp',
 )
 
+libfuzzer_args = [
+    '-fsanitize=leak,fuzzer,address',
+    '-fno-omit-frame-pointer',
+    '-fprofile-instr-generate',
+    '-fcoverage-mapping',
+    '-g'
+]
+
 bmcweblib = static_library(
     'bmcweblib',
     srcfiles_bmcweb,
     include_directories: incdir,
     dependencies: bmcweb_dependencies,
-)
-
-# Generate the bmcwebd daemon
-executable(
-    'bmcwebd',
-    'src/webserver_main.cpp',
-    include_directories: incdir,
-    dependencies: bmcweb_dependencies,
-    link_with: bmcweblib,
-    link_args: '-Wl,--gc-sections',
-    install: true,
-    install_dir: libexec,
+    cpp_args: get_option('fuzzing')? libfuzzer_args: [],
 )
 
 if get_option('fuzzing')
-  libfuzzer_args = [
-      '-fsanitize=leak,fuzzer,address',
-      '-fno-omit-frame-pointer',
-      '-fprofile-instr-generate',
-      '-fcoverage-mapping',
-      '-g'
-  ]
-
-  executable(
-    'http2_fuzzer',
-    'src/fuzzer.cpp',
-    include_directories: incdir,
-    dependencies: bmcweb_dependencies,
-    link_with: bmcweblib,
-    cpp_args: libfuzzer_args,
-    link_args: libfuzzer_args,
-  )
+    # Generate fuzzing binary
+    executable(
+        'bmcwebd_fuzzer',
+        'src/fuzzer.cpp',
+        include_directories: incdir,
+        dependencies: bmcweb_dependencies,
+        link_with: bmcweblib,
+        link_args: ['-Wl,--gc-sections'] + libfuzzer_args,
+        cpp_args: libfuzzer_args,
+        install: true,
+        install_dir: libexec,
+    )
+else
+    # Generate the bmcwebd daemon
+    executable(
+        'bmcwebd',
+        'src/webserver_main.cpp',
+        include_directories: incdir,
+        dependencies: bmcweb_dependencies,
+        link_with: bmcweblib,
+        link_args: '-Wl,--gc-sections',
+        install: true,
+        install_dir: libexec,
+    )
+    # Generate the bmcweb CLI application
+    executable(
+        'bmcweb',
+        ['src/webserver_cli.cpp', 'src/boost_asio.cpp'],
+        include_directories: incdir_cli,
+        dependencies: bmcweb_cli_dependencies,
+        install: true,
+        install_dir: bindir,
+    )
 endif
-
-# Generate the bmcweb CLI application
-executable(
-    'bmcweb',
-    ['src/webserver_cli.cpp', 'src/boost_asio.cpp'],
-    include_directories: incdir_cli,
-    dependencies: bmcweb_cli_dependencies,
-    install: true,
-    install_dir: bindir,
-)
 
 subdir('test')
